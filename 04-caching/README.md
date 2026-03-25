@@ -27,6 +27,7 @@ This comprehensive guide covers everything you need to know about caching, from 
 | 9 | [Cache Stampede Prevention](./09-cache-stampede.md) | Locking, Coalescing, Probabilistic Expiration | Advanced |
 | 10 | [Real-World Examples](./10-real-world-examples.md) | Twitter, Netflix, Amazon case studies | Advanced |
 | 11 | [Best Practices & Pitfalls](./11-best-practices.md) | Do's, Don'ts, Common mistakes | All Levels |
+| 12 | [Interview Questions](./12-interview-questions.md) | 6 detailed questions with sample answers | Interview |
 
 ---
 
