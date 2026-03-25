@@ -10,7 +10,7 @@ A comprehensive repository for learning system design concepts, patterns, and re
 
 | Section | Status | Description |
 |---------|--------|-------------|
-| [**04-caching/**](./04-caching/) | ✅ Complete | 12 detailed files + Interview Cheatsheet + 7 Interview Questions |
+| [**04-caching/**](./04-caching/) | ✅ Complete | 12 detailed files + Interview Cheatsheet + 7 Real-World Scenarios |
 
 ---
 
@@ -255,20 +255,6 @@ Real-world system design examples:
 | Design Fraud Detection | Real-time ML inference |
 | Design AI Code Assistant | RAG, code embeddings |
 | Design Image Generation Service | Diffusion models, GPU serving |
-
----
-
-## 12. Interview Preparation
-
-### 📁 [12-interview-prep/](./12-interview-prep/)
-
-| Resource | Description |
-|----------|-------------|
-| System Design Framework | Step-by-step approach |
-| Estimation Cheatsheet | Back-of-envelope calculations |
-| Common Questions | Frequently asked questions |
-| AI/ML System Design Questions | ML-specific interview prep |
-| Trade-offs Cheatsheet | Common design trade-offs |
 
 ---
 

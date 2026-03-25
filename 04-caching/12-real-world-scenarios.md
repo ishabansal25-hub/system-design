@@ -1,10 +1,10 @@
-# 12. Interview Questions with Detailed Explanations
+# 12. Real-World Scenarios with Detailed Solutions
 
 [← Back to Caching Index](./README.md) | [← Interview Cheatsheet](./INTERVIEW-CHEATSHEET.md)
 
 ---
 
-These are real interview questions asked at top tech companies. Each question tests deep understanding of caching concepts, trade-offs, and practical problem-solving skills.
+These are real-world scenarios that engineers face when building production systems. Each scenario tests deep understanding of caching concepts, trade-offs, and practical problem-solving skills.
 
 ---
 
