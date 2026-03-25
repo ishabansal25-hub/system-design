@@ -2,6 +2,18 @@
 
 A comprehensive repository for learning system design concepts, patterns, and real-world case studies. This guide covers everything from fundamentals to advanced distributed systems and AI/ML system design.
 
+> ⚠️ **Note**: This repository is a work in progress. Currently, only the **[Caching](./04-caching/)** section is complete with detailed content. Other sections are planned and will be added over time.
+
+---
+
+## ✅ Available Content
+
+| Section | Status | Description |
+|---------|--------|-------------|
+| [**04-caching/**](./04-caching/) | ✅ Complete | 12 detailed files + Interview Cheatsheet + 7 Interview Questions |
+
+---
+
 ## 📚 Table of Contents
 
 1. [Fundamentals](#1-fundamentals)

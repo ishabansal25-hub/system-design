@@ -658,6 +658,241 @@ Remove low-value cached data
 
 ---
 
+## Question 7: Cache Penetration (Non-Existent Data)
+
+### 🎯 The Question
+
+> "What happens if a user requests an ID that doesn't exist in the database? Our cache-aside logic will see it's not in cache, hit the DB, find nothing, and then the next request will do the same thing. How do you handle this?"
+
+### 🧠 What the Interviewer is Testing
+
+- Understanding of **cache penetration** problem
+- Knowledge of **negative caching** patterns
+- Ability to think about **malicious attack scenarios**
+- Understanding of **Bloom filters** and probabilistic data structures
+
+### 📖 Detailed Explanation
+
+**The Problem Visualized:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Cache Penetration Problem                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Request: GET /user/999999999 (doesn't exist)                   │
+│                                                                  │
+│  Step 1: Check cache → MISS (not in cache)                      │
+│  Step 2: Query DB → NULL (doesn't exist)                        │
+│  Step 3: Return 404 (nothing to cache)                          │
+│                                                                  │
+│  Next request for same ID:                                       │
+│  Step 1: Check cache → MISS (still not in cache!)               │
+│  Step 2: Query DB → NULL (still doesn't exist)                  │
+│  Step 3: Return 404                                              │
+│                                                                  │
+│  Problem: EVERY request for non-existent ID hits the database!  │
+│                                                                  │
+│  Attack scenario:                                                │
+│  Attacker sends 10,000 req/s for random non-existent IDs        │
+│  → 10,000 DB queries/sec → Database overwhelmed 💥              │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Why this is dangerous:**
+
+1. **Legitimate traffic**: Users bookmarking deleted content, typos in URLs
+2. **Malicious attacks**: Attackers deliberately requesting non-existent IDs
+3. **Cascading failures**: DB overload affects all users, not just bad requests
+
+### ✅ The Answer (Multiple Solutions)
+
+#### Solution 1: Cache Null/Empty Results (Negative Caching)
+
+**Concept**: Cache the fact that something DOESN'T exist.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Negative Caching                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Request: GET /user/999999999                                   │
+│                                                                  │
+│  Step 1: Check cache → MISS                                     │
+│  Step 2: Query DB → NULL                                        │
+│  Step 3: Cache the NULL with short TTL                          │
+│          SET user:999999999 = "NULL" TTL=5min                   │
+│  Step 4: Return 404                                              │
+│                                                                  │
+│  Next request (within 5 min):                                    │
+│  Step 1: Check cache → HIT (value = "NULL")                     │
+│  Step 2: Return 404 immediately (no DB query!)                  │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Implementation:**
+
+```python
+def get_user(user_id):
+    # Check cache
+    cached = cache.get(f"user:{user_id}")
+    
+    if cached is not None:
+        if cached == "NULL":  # Negative cache hit
+            return None
+        return cached
+    
+    # Cache miss - query DB
+    user = db.query(f"SELECT * FROM users WHERE id = {user_id}")
+    
+    if user is None:
+        # Cache the NULL with SHORT TTL (5 minutes)
+        cache.set(f"user:{user_id}", "NULL", ttl=300)
+        return None
+    else:
+        # Cache the real data with LONGER TTL (1 hour)
+        cache.set(f"user:{user_id}", user, ttl=3600)
+        return user
+```
+
+**Trade-offs**:
+- ✅ Simple to implement
+- ✅ Effective for repeated requests
+- ❌ Attacker can use DIFFERENT non-existent IDs each time
+- ❌ Cache fills up with null entries
+
+**Important**: Use SHORT TTL for null entries (5 min vs 1 hour for real data)
+- If data is created later, we don't want to serve stale "doesn't exist" for too long
+
+#### Solution 2: Bloom Filter (Probabilistic Check)
+
+**Concept**: Use a Bloom filter to quickly check if an ID MIGHT exist before querying.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Bloom Filter Approach                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Bloom Filter: Space-efficient probabilistic data structure     │
+│  - Can tell you "definitely NOT in set" (100% accurate)         │
+│  - Can tell you "MIGHT be in set" (small false positive rate)   │
+│                                                                  │
+│  Request: GET /user/999999999                                   │
+│                                                                  │
+│  Step 1: Check Bloom filter                                      │
+│          → "Definitely not in set"                              │
+│  Step 2: Return 404 immediately (no cache or DB query!)         │
+│                                                                  │
+│  Request: GET /user/123 (exists)                                │
+│                                                                  │
+│  Step 1: Check Bloom filter                                      │
+│          → "Might be in set"                                    │
+│  Step 2: Check cache → MISS                                     │
+│  Step 3: Query DB → Found!                                      │
+│  Step 4: Return user data                                        │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**How Bloom Filter works:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Bloom Filter Internals                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Bit array: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]                      │
+│                                                                  │
+│  Add "user:123":                                                 │
+│  - hash1("user:123") = 2                                        │
+│  - hash2("user:123") = 7                                        │
+│  - Set bits 2 and 7 to 1                                        │
+│                                                                  │
+│  Bit array: [0, 0, 1, 0, 0, 0, 0, 1, 0, 0]                      │
+│                                                                  │
+│  Check "user:999":                                               │
+│  - hash1("user:999") = 4                                        │
+│  - hash2("user:999") = 9                                        │
+│  - Bits 4 and 9 are 0 → DEFINITELY NOT IN SET                   │
+│                                                                  │
+│  Check "user:123":                                               │
+│  - hash1("user:123") = 2                                        │
+│  - hash2("user:123") = 7                                        │
+│  - Bits 2 and 7 are 1 → MIGHT BE IN SET (check DB)              │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Trade-offs**:
+- ✅ Very memory efficient (1 bit per entry vs full key)
+- ✅ O(1) lookup time
+- ✅ Blocks ALL non-existent IDs (not just repeated ones)
+- ❌ Small false positive rate (1-5%)
+- ❌ Need to rebuild when data changes
+- ❌ More complex to implement
+
+#### Solution 3: Rate Limiting + Request Validation
+
+**Concept**: Limit requests and validate input before processing.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Defense in Depth                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Layer 1: Input Validation                                       │
+│  - User IDs must be positive integers                           │
+│  - User IDs must be < 10 billion (reasonable range)             │
+│  - Reject obviously invalid IDs immediately                     │
+│                                                                  │
+│  Layer 2: Rate Limiting                                          │
+│  - Max 100 requests/second per IP                               │
+│  - Max 10 404s/minute per IP (suspicious pattern)               │
+│                                                                  │
+│  Layer 3: Negative Caching                                       │
+│  - Cache null results with short TTL                            │
+│                                                                  │
+│  Layer 4: Bloom Filter (optional)                                │
+│  - Quick existence check                                         │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Solution 4: Return Placeholder Data
+
+**Concept**: For some use cases, return default/placeholder data instead of 404.
+
+```
+Request: GET /user/999999999
+
+Instead of: 404 Not Found
+Return: { "id": 999999999, "name": "Unknown User", "status": "not_found" }
+
+Cache this placeholder with short TTL
+```
+
+**Use case**: Social media profiles, where showing "User not found" is acceptable
+
+### 🎤 Sample Answer
+
+> "This is the **cache penetration** problem. Without protection, every request for a non-existent ID bypasses the cache and hits the database. This can be exploited in attacks.
+>
+> I'd implement a **layered defense**:
+>
+> **First, negative caching**: Cache null results with a SHORT TTL (5 minutes). This handles repeated requests for the same non-existent ID.
+>
+> **Second, input validation**: Reject obviously invalid IDs at the API layer before they reach the cache or database.
+>
+> **Third, rate limiting**: Limit 404 responses per IP. If someone is getting many 404s, they're either attacking or have a bug.
+>
+> **For high-scale systems**, I'd add a **Bloom filter** that contains all valid IDs. It can definitively say 'this ID does NOT exist' without any database query. The trade-off is a small false positive rate and the need to update it when data changes.
+>
+> The key insight is: **cache the absence of data, not just the presence**."
+
+---
+
 ## 📚 Summary: Key Interview Themes
 
 | Theme | What to Demonstrate |
