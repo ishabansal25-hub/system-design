@@ -6,6 +6,12 @@ This comprehensive guide covers everything you need to know about caching, from 
 
 ---
 
+## 🎯 Interview Prep?
+
+**[📋 INTERVIEW CHEATSHEET](./INTERVIEW-CHEATSHEET.md)** - Quick 1-2 day review before your interview!
+
+---
+
 ## 📚 Table of Contents
 
 | # | Topic | Description | Level |
