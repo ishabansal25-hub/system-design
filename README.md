@@ -183,32 +183,32 @@ A comprehensive repository for learning system design concepts, patterns, and re
 
 | Topic | Description |
 |-------|-------------|
-| **ML System Design Fundamentals** | |
+| **ML Fundamentals** | |
 | ML Pipeline Architecture | Data → Training → Serving |
-| Feature Stores | Feast, Tecton, Feature engineering |
-| Model Training Infrastructure | Distributed training, GPU clusters |
-| Model Serving | TensorFlow Serving, TorchServe, Triton |
-| **LLM & GenAI Systems** | |
-| LLM Architecture | Transformers, Attention mechanisms |
-| RAG (Retrieval Augmented Generation) | Vector search + LLM |
-| Prompt Engineering | System prompts, few-shot learning |
-| LLM Serving & Optimization | vLLM, TensorRT-LLM, quantization |
-| Fine-tuning Strategies | LoRA, QLoRA, PEFT |
-| **AI Infrastructure** | |
-| Vector Databases | Pinecone, Weaviate, Milvus, pgvector |
-| Embedding Models | OpenAI, Sentence Transformers |
-| GPU Infrastructure | CUDA, Multi-GPU, Cloud GPUs |
-| Model Registry | MLflow, Weights & Biases |
-| **AI Application Patterns** | |
-| Chatbot Architecture | Conversation management, memory |
-| AI Agents | Tool use, planning, ReAct pattern |
-| Multimodal Systems | Vision + Language models |
-| Real-time AI Inference | Low-latency serving |
-| **MLOps & AI Ops** | |
+| Model Serving | Inference at scale, latency vs throughput |
+| Feature Stores | Centralized feature management |
+| **LLM Systems** | |
+| LLM Architecture | Transformers, context windows, tokenization |
+| LLM Serving | vLLM, batching, quantization, GPU optimization |
+| Fine-tuning vs Prompting | When to use each approach |
+| **Prompting Techniques** | |
+| Prompt Engineering | System prompts, few-shot, Chain-of-Thought |
+| ReAct Pattern | Reasoning + Acting for complex tasks |
+| **RAG (Retrieval Augmented Generation)** | |
+| RAG Architecture | Embedding → Retrieval → Generation |
+| Vector Databases | Pinecone, Weaviate, pgvector |
+| Chunking & Retrieval | Strategies for effective retrieval |
+| **AI Agents** | |
+| Agent Architecture | Planning, tool use, memory |
+| Tool Use & Function Calling | Structured outputs, tool schemas |
+| Multi-Agent Systems | Collaboration, delegation patterns |
+| **Orchestration** | |
+| LLM Orchestration | Chaining, routing, error handling |
+| MCP (Model Context Protocol) | Standardized tool integration |
+| Guardrails & Safety | Input/output validation |
+| **MLOps** | |
 | ML Monitoring | Model drift, data drift |
-| A/B Testing for ML | Experimentation frameworks |
-| CI/CD for ML | Model versioning, deployment |
-| Cost Optimization | GPU utilization, spot instances |
+| Cost Optimization | GPU utilization, inference costs |
 
 ---
 
