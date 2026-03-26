@@ -1,138 +1,192 @@
-# 8. Cache Invalidation
+# Cache Invalidation
 
-[← Back to Caching Index](./README.md) | [← Previous: Distributed Caching](./07-distributed-caching.md)
+[← Back to Caching](./README.md) | [← Previous: Distributed Caching](./07-distributed-caching.md)
 
 ---
-
-## 🎯 The Hardest Problem in Caching
 
 > "There are only two hard things in Computer Science: cache invalidation and naming things."
 
-**Why it's hard:**
-- Cache and database can become inconsistent
-- Multiple servers may have different cached values
-- Race conditions between updates and reads
-- Distributed systems make it even harder
+This quote exists because invalidation is genuinely tricky. The cache has a copy of data, the database has the source of truth, and keeping them in sync is harder than it sounds.
 
 ---
 
-## 📖 Invalidation Strategies
+## Why it's hard
 
-### 1. TTL-Based Expiration
+The fundamental problem: you have data in two places (cache and database), and they can get out of sync.
 
-**How it works**: Data automatically expires after a set time.
+**Scenarios that cause trouble:**
+
+1. **Stale reads:** User A updates their profile. User B reads the cached (old) profile. User B sees outdated info.
+
+2. **Race conditions:** Two users update the same record simultaneously. Depending on timing, the cache might end up with the wrong value.
+
+3. **Distributed systems:** You have 10 app servers, each with local caches. User updates on server 1. Servers 2-10 still have old data.
+
+4. **Failures:** You update the database, then try to invalidate cache, but the cache server is temporarily unreachable. Now they're out of sync.
+
+There's no perfect solution. Every approach has tradeoffs.
+
+---
+
+## Strategy 1: TTL-Based Expiration
+
+The simplest approach. Set a TTL, let data expire automatically.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    TTL-Based Invalidation                        │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  Time 0ms:   SET user:123 {data} TTL=60s                        │
-│                                                                  │
-│  Time 30s:   GET user:123 → Returns {data} ✓                    │
-│                                                                  │
-│  Time 60s:   GET user:123 → Returns NULL (expired)              │
-│              Cache miss → Fetch fresh data from DB              │
-│                                                                  │
-│  Pros: Simple, automatic                                         │
-│  Cons: Data may be stale until TTL expires                      │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+SET user:123 {data} TTL=300  # Expires in 5 minutes
+
+# After 5 minutes, key is gone
+# Next read fetches fresh data from DB
 ```
+
+**The tradeoff:** Data can be stale for up to TTL duration. If you set TTL=5min, users might see 5-minute-old data.
+
+**When it works well:**
+- Data that doesn't change often
+- Data where slight staleness is acceptable
+- When you want simplicity over perfect consistency
 
 **Choosing TTL values:**
-| Data Type | Suggested TTL | Reason |
-|-----------|---------------|--------|
+
+| Data | TTL | Reasoning |
+|------|-----|-----------|
 | User sessions | 30 min - 24 hours | Security vs convenience |
-| Product catalog | 5-15 minutes | Prices may change |
-| Static content | 1 hour - 1 day | Rarely changes |
-| Real-time data | 1-5 seconds | Needs freshness |
+| Product prices | 5-15 minutes | Changes occasionally |
+| User profiles | 1-5 minutes | Infrequent updates |
+| Homepage content | 1-5 minutes | Can be slightly stale |
+| Real-time data | Seconds | Needs freshness |
+
+**Pro tip:** Add jitter to TTLs. Instead of all keys expiring at exactly 5 minutes, use random(4min, 6min). Prevents stampedes.
 
 ---
 
-### 2. Event-Based Invalidation
+## Strategy 2: Explicit Invalidation
 
-**How it works**: Invalidate cache when data changes.
+When data changes, explicitly delete (or update) the cache.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                  Event-Based Invalidation                        │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  1. User updates profile                                         │
-│     ┌─────────┐                                                 │
-│     │   App   │                                                 │
-│     └────┬────┘                                                 │
-│          │                                                       │
-│  2. Update database                                              │
-│          ▼                                                       │
-│     ┌─────────┐                                                 │
-│     │   DB    │                                                 │
-│     └────┬────┘                                                 │
-│          │                                                       │
-│  3. Publish "user:123 updated" event                            │
-│          ▼                                                       │
-│     ┌─────────────┐                                             │
-│     │ Message Bus │                                             │
-│     │  (Kafka)    │                                             │
-│     └──────┬──────┘                                             │
-│            │                                                     │
-│  4. Cache service receives event → DELETE user:123              │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+```python
+def update_user(user_id, new_data):
+    # 1. Update database
+    db.update_user(user_id, new_data)
+    
+    # 2. Invalidate cache
+    cache.delete(f"user:{user_id}")
+    
+    # Next read will fetch fresh data
 ```
 
-**Pros**: Immediate invalidation, no stale data
-**Cons**: Complex infrastructure, potential message loss
+**Delete vs Update:**
+
+Always prefer **delete** over update. Here's why:
+
+```
+# BAD: Update cache
+Thread A: Update DB to $100
+Thread B: Update DB to $200
+Thread B: Update cache to $200
+Thread A: Update cache to $100  ← WRONG! Cache has stale data
+
+# GOOD: Delete cache
+Thread A: Update DB to $100
+Thread B: Update DB to $200
+Thread B: Delete cache
+Thread A: Delete cache  ← Both delete, no problem
+# Next read gets $200 from DB
+```
+
+Delete is idempotent. Multiple deletes are fine. Multiple updates can race.
 
 ---
 
-### 3. Version-Based Invalidation
+## Strategy 3: Event-Driven Invalidation
 
-**How it works**: Include version in cache key. When data changes, increment version.
+Decouple the invalidation from the write path using events.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                 Version-Based Invalidation                       │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  Version 1:                                                      │
-│  Cache key: "user:123:v1"                                       │
-│  Value: {name: "John", email: "john@old.com"}                   │
-│                                                                  │
-│  User updates email...                                           │
-│                                                                  │
-│  Version 2:                                                      │
-│  Cache key: "user:123:v2"                                       │
-│  Value: {name: "John", email: "john@new.com"}                   │
-│                                                                  │
-│  Old cache entry (v1) is simply ignored/expires                 │
-│  No explicit deletion needed                                     │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+App updates DB
+    ↓
+DB publishes change event (CDC or app-level)
+    ↓
+Message queue (Kafka, etc.)
+    ↓
+Cache invalidation service consumes event
+    ↓
+Deletes from cache
 ```
 
-**Pros**: No race conditions, simple rollback
-**Cons**: Old versions waste space until they expire
+**Why this helps:**
+- Write path is fast (doesn't wait for cache)
+- Invalidation can be retried if it fails
+- Works across services
+
+**The catch:**
+- More infrastructure
+- Eventual consistency (delay between DB write and cache invalidation)
+- Message ordering issues
 
 ---
 
-## ⚠️ Delete vs Update
+## Strategy 4: Version-Based Keys
 
-**Delete (Recommended):**
-1. Update database
-2. Delete from cache
-3. Next read fetches fresh data
+Instead of invalidating, change the cache key.
 
-**Update (Risky):**
-1. Update database
-2. Update cache with new value
+```
+# Version 1
+Cache key: "user:123:v1"
+Value: {name: "John", email: "old@email.com"}
 
-**Why delete is better:**
-- Simpler (no need to know new value)
-- Avoids race conditions
-- Cache only stores what's needed
+# User updates email, version increments
+Cache key: "user:123:v2"
+Value: {name: "John", email: "new@email.com"}
+
+# Old key (v1) just expires naturally
+```
+
+**How to track versions:**
+- Store current version in a fast lookup (Redis itself, or DB)
+- Or use a timestamp as version
+
+**Why this works:**
+- No race conditions (old and new versions are different keys)
+- Easy rollback (just point back to old version)
+- No explicit deletion needed
+
+**The catch:**
+- Old versions waste memory until they expire
+- Need to track/lookup current version
 
 ---
 
-[Next: Cache Stampede Prevention →](./09-cache-stampede.md)
+## What I'd recommend
+
+For most applications:
+
+1. **Use TTL as a safety net.** Even with explicit invalidation, set a TTL. If invalidation fails, data eventually expires anyway.
+
+2. **Delete on write.** When you update the database, delete the cache key. Don't try to update it.
+
+3. **Accept eventual consistency.** For most use cases, a few seconds of staleness is fine. Don't over-engineer for perfect consistency unless you really need it.
+
+4. **Keep it simple.** TTL + delete-on-write handles 90% of cases. Add event-driven invalidation only if you have specific requirements (cross-service, high reliability).
+
+```python
+def update_user(user_id, data):
+    db.update(user_id, data)
+    cache.delete(f"user:{user_id}")  # Simple and effective
+```
+
+---
+
+## Common mistakes
+
+**Forgetting to invalidate.** You add caching, it works great. Months later, someone adds a new update path and forgets to invalidate. Stale data bugs ensue.
+
+**Invalidating before DB write.** If you delete cache, then DB write fails, you've invalidated for no reason. Always: DB first, then cache.
+
+**Over-complicating.** Building elaborate pub/sub systems when TTL + delete would work fine.
+
+**Not handling failures.** What if cache.delete() fails? At minimum, log it. Better: retry. Best: have TTL as backup.
+
+---
+
+[Next: Cache Stampede →](./09-cache-stampede.md)

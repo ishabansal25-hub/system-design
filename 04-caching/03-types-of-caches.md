@@ -1,225 +1,179 @@
-# 3. Types of Caches
+# Types of Caches
 
-[← Back to Caching Index](./README.md) | [← Previous: Why Caching Matters](./02-why-caching-matters.md)
-
----
-
-## 🏗️ Cache Hierarchy
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Cache Hierarchy                             │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │                    CLIENT SIDE                           │    │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐      │    │
-│  │  │   Browser   │  │   Mobile    │  │   Desktop   │      │    │
-│  │  │    Cache    │  │  App Cache  │  │  App Cache  │      │    │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘      │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                              │                                   │
-│                              ▼                                   │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │                       CDN LAYER                          │    │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐      │    │
-│  │  │  CloudFront │  │  Cloudflare │  │   Akamai    │      │    │
-│  │  │   (Edge)    │  │   (Edge)    │  │   (Edge)    │      │    │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘      │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                              │                                   │
-│                              ▼                                   │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │                   APPLICATION LAYER                      │    │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐      │    │
-│  │  │  In-Memory  │  │   Local     │  │  Distributed│      │    │
-│  │  │   (Dict)    │  │   (File)    │  │   (Redis)   │      │    │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘      │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                              │                                   │
-│                              ▼                                   │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │                    DATABASE LAYER                        │    │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐      │    │
-│  │  │   Query     │  │   Buffer    │  │  Connection │      │    │
-│  │  │   Cache     │  │    Pool     │  │    Pool     │      │    │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘      │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
+[← Back to Caching](./README.md) | [← Previous: Why Caching Matters](./02-why-caching-matters.md)
 
 ---
 
-## 📱 1. Client-Side Cache
+Caching happens at multiple layers. Understanding where each type fits helps you decide what to use.
 
-**What**: Data stored on user's device (browser, mobile app)
+```
+User's Device
+    ↓
+CDN (edge servers)
+    ↓
+Your App Servers (in-memory or distributed)
+    ↓
+Database (query cache, buffer pool)
+```
 
-**Examples**:
-- Browser cache (images, CSS, JS files)
-- LocalStorage / SessionStorage
-- Mobile app SQLite cache
-- Service Workers (PWA offline cache)
-
-### Characteristics
-
-| Aspect | Details |
-|--------|---------|
-| Location | User's device |
-| Control | Limited (user can clear) |
-| Size | ~5-50 MB typical |
-| Speed | Fastest (no network) |
-| Scope | Single user only |
-
-**Real-world analogy**: Your phone's photo gallery. Photos are stored locally so you can view them instantly without downloading again.
+Each layer catches requests before they hit the next one. The closer to the user, the faster.
 
 ---
 
-## 🌐 2. CDN Cache (Content Delivery Network)
+## 1. Client-Side Cache
 
-**What**: Geographically distributed servers that cache static content close to users
+This is caching on the user's device - browser, mobile app, desktop app.
+
+**What gets cached:**
+- Images, CSS, JavaScript (browser cache)
+- LocalStorage / SessionStorage data
+- Mobile app's local database
+- Service Worker cache (for offline PWAs)
+
+**The good:**
+- Fastest possible - no network at all
+- Reduces your server load
+- Works offline
+
+**The bad:**
+- You can't control it (users can clear it)
+- Limited space (~5-50 MB typically)
+- Only helps that one user
+
+**When to use:** Static assets, user preferences, anything that doesn't change often and is specific to that user.
+
+---
+
+## 2. CDN Cache
+
+CDN = Content Delivery Network. Servers distributed around the world that cache your content close to users.
+
+**How it works:**
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     CDN Architecture                             │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│     User in India          User in USA          User in Europe  │
-│          │                      │                      │        │
-│          ▼                      ▼                      ▼        │
-│    ┌──────────┐           ┌──────────┐           ┌──────────┐   │
-│    │  Mumbai  │           │   NYC    │           │  London  │   │
-│    │  Edge    │           │  Edge    │           │  Edge    │   │
-│    │  Server  │           │  Server  │           │  Server  │   │
-│    └────┬─────┘           └────┬─────┘           └────┬─────┘   │
-│         │                      │                      │         │
-│         │    Cache Miss?       │    Cache Miss?       │         │
-│         │                      │                      │         │
-│         └──────────────────────┼──────────────────────┘         │
-│                                │                                 │
-│                                ▼                                 │
-│                    ┌─────────────────────┐                      │
-│                    │    Origin Server    │                      │
-│                    │   (Your Backend)    │                      │
-│                    └─────────────────────┘                      │
-│                                                                  │
-│  Benefits:                                                       │
-│  • User in India: 20ms latency (from Mumbai edge)               │
-│  • Without CDN: 200ms latency (from US origin)                  │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+User in Tokyo requests image.jpg
+    ↓
+CDN edge server in Tokyo: "Do I have it?"
+    ↓
+Yes → Return immediately (20ms)
+No → Fetch from your origin server in US (200ms), cache it, return
+    ↓
+Next user in Tokyo gets it in 20ms
 ```
 
-### What CDNs cache
+**What CDNs cache:**
 - Static files (images, videos, CSS, JS)
-- API responses (with proper headers)
-- HTML pages (for static sites)
+- API responses (if you set the right headers)
+- Entire HTML pages (for static sites)
 
-### Popular CDN providers
+**Popular options:**
+- CloudFront (AWS) - good if you're already on AWS
+- Cloudflare - great free tier, good DDoS protection
+- Fastly - real-time purging, used by GitHub/Stripe
+- Akamai - enterprise, massive network
 
-| Provider | Strengths |
-|----------|-----------|
-| CloudFront | AWS integration, Lambda@Edge |
-| Cloudflare | DDoS protection, Workers |
-| Akamai | Enterprise, largest network |
-| Fastly | Real-time purging, edge compute |
-
-**Real-world analogy**: Amazon warehouses. Instead of shipping everything from one central warehouse, they have fulfillment centers near major cities for faster delivery.
+**When to use:** Any static content, especially if you have users globally. The latency improvement from serving from a nearby edge server is significant.
 
 ---
 
-## 🖥️ 3. Application-Level Cache
+## 3. Application-Level Cache
 
-**What**: Cache within your application servers
+This is caching in your application code. Two flavors:
 
-### a) In-Memory Cache (Single Server)
+### In-Memory (Local) Cache
 
-**What**: Data stored in application's RAM
+Data stored in your app server's RAM. Think a Python dictionary or Java HashMap.
 
-| Aspect | Details |
-|--------|---------|
-| Speed | Extremely fast (nanoseconds) |
-| Scope | Single server only |
-| Persistence | Lost on restart |
-| Size | Limited by server RAM |
+```python
+# Simple example
+cache = {}
 
-**When to use**:
-- Small datasets that fit in memory
-- Single-server applications
-- Temporary computation results
-- Session data (with sticky sessions)
-
-**Real-world analogy**: Your brain's short-term memory. Quick to access but limited capacity and forgotten when you sleep.
-
-### b) Distributed Cache (Multiple Servers)
-
-**What**: Shared cache accessible by all application servers
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Distributed Cache                             │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│   ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐           │
-│   │  App    │  │  App    │  │  App    │  │  App    │           │
-│   │Server 1 │  │Server 2 │  │Server 3 │  │Server 4 │           │
-│   └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘           │
-│        │            │            │            │                  │
-│        └────────────┴─────┬──────┴────────────┘                  │
-│                           │                                      │
-│                           ▼                                      │
-│              ┌─────────────────────────┐                        │
-│              │    Distributed Cache    │                        │
-│              │   (Redis / Memcached)   │                        │
-│              │                         │                        │
-│              │  ┌─────┐ ┌─────┐ ┌─────┐│                        │
-│              │  │Node1│ │Node2│ │Node3││                        │
-│              │  └─────┘ └─────┘ └─────┘│                        │
-│              └─────────────────────────┘                        │
-│                                                                  │
-│  Benefits:                                                       │
-│  • All app servers share same cache                             │
-│  • Survives individual server failures                          │
-│  • Scales horizontally                                          │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+def get_user(user_id):
+    if user_id in cache:
+        return cache[user_id]
+    user = db.fetch_user(user_id)
+    cache[user_id] = user
+    return user
 ```
 
-| Aspect | Details |
-|--------|---------|
-| Speed | Fast (sub-millisecond) |
-| Scope | All servers in cluster |
-| Persistence | Configurable |
-| Size | Scales with nodes |
+**Characteristics:**
+- Extremely fast (nanoseconds)
+- Only accessible by that one server
+- Lost when server restarts
+- Limited by server RAM
 
-**Real-world analogy**: A shared Google Doc. Everyone on the team can access and update it, and changes are visible to all.
+**When to use:** 
+- Single-server apps
+- Data that's OK to be different across servers briefly
+- Extremely hot data where even 1ms Redis latency matters
+
+**Libraries:** Guava Cache (Java), Caffeine (Java), cachetools (Python)
+
+### Distributed Cache
+
+Shared cache that all your app servers can access. Usually Redis or Memcached.
+
+```
+App Server 1 ─┐
+App Server 2 ─┼──→ Redis Cluster ──→ Database
+App Server 3 ─┘
+```
+
+**Characteristics:**
+- Fast (sub-millisecond, but slower than local)
+- Shared across all servers
+- Survives individual server restarts
+- Scales horizontally
+
+**When to use:**
+- Multi-server deployments
+- Session storage
+- Any shared state
+- Most production caching needs
 
 ---
 
-## 🗄️ 4. Database Cache
+## 4. Database Cache
 
-**What**: Caching at the database level
+Your database does its own caching too.
 
-| Type | Description | Example |
-|------|-------------|---------|
-| Query Cache | Caches query results | Same SELECT returns cached result |
-| Buffer Pool | Caches data pages in memory | Frequently accessed rows stay in RAM |
-| Connection Pool | Reuses database connections | Avoids connection overhead |
-| Materialized Views | Pre-computed query results | Complex aggregations stored as tables |
+**Query Cache:** Some databases cache query results. Same query = cached result. (MySQL had this, but it's deprecated because invalidation was problematic.)
 
-**Real-world analogy**: A restaurant's prep station. Commonly used ingredients are pre-chopped and ready, rather than preparing everything from scratch for each order.
+**Buffer Pool:** The database keeps frequently accessed data pages in RAM. This is why giving your database more RAM often helps performance.
+
+**Connection Pool:** Not exactly a cache, but reusing database connections avoids the overhead of establishing new ones.
+
+**Materialized Views:** Pre-computed query results stored as tables. Good for expensive aggregations that don't need real-time data.
+
+You usually don't configure these directly (except buffer pool size), but it's good to know they exist.
 
 ---
 
-## 📊 Cache Type Comparison
+## Comparison
 
-| Type | Speed | Scope | Size | Control | Best For |
-|------|-------|-------|------|---------|----------|
-| Client-side | Fastest | Single user | Small | Limited | Static assets, user prefs |
-| CDN | Very fast | Global | Large | Medium | Static content, media |
-| In-memory | Fast | Single server | Medium | Full | Hot data, sessions |
-| Distributed | Fast | All servers | Large | Full | Shared state, sessions |
-| Database | Medium | Database | Large | Limited | Query results |
+| Type | Speed | Scope | Best for |
+|------|-------|-------|----------|
+| Client-side | Fastest | Single user | Static assets, offline |
+| CDN | Very fast | Global | Static content, media |
+| Local (in-memory) | Fast | Single server | Hot data, single-server apps |
+| Distributed | Fast | All servers | Shared state, sessions |
+| Database | Medium | Database | Automatic, query results |
+
+---
+
+## What I'd use
+
+**Small app, single server:** Local in-memory cache is fine. Keep it simple.
+
+**Multi-server app:** Redis for most things. It's the default choice for a reason.
+
+**Static assets:** CDN. Always. The cost is minimal and the benefit is huge.
+
+**Global users:** CDN + Redis. CDN for static stuff, Redis for dynamic data.
+
+**Extremely hot data:** Two-tier: local cache in front of Redis. But only if you've measured and the 1ms Redis latency actually matters.
+
+Don't over-engineer. Start with one layer (probably Redis), measure, then add more if needed.
 
 ---
 
